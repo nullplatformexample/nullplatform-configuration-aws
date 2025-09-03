@@ -16,16 +16,16 @@ module "code-repository" {
 #Prvider AWS
 ###############################################################################
 module "cloud-provider" {
-  source = "git::ssh://git@github.com/nullplatform/infrastructure-main-nullplatform-terraform.git//business/nullplatform/providers/cloud/aws?ref=feature/add-null-config"
-  account = var.account
-  aws_region = var.aws_region
-  domain_name = var.domain_name
-  environment = var.environment
-  hosted_public_zone_id = module.route53.public_zone_id
+  source                 = "git::ssh://git@github.com/nullplatform/infrastructure-main-nullplatform-terraform.git//business/nullplatform/providers/cloud/aws?ref=feature/add-null-config"
+  account                = var.account
+  aws_region             = var.aws_region
+  domain_name            = var.domain_name
+  environment            = var.environment
+  hosted_public_zone_id  = module.route53.public_zone_id
   hosted_private_zone_id = module.route53.private_zone_id
-  nrn = var.nrn
-  organization = var.organization
-  scope_workflow_role = module.iam.nullplatform_scope_workflow_role_arn
+  nrn                    = var.nrn
+  organization           = var.organization
+  scope_workflow_role    = module.iam.nullplatform_scope_workflow_role_arn
 }
 
 ################################################################################
@@ -33,10 +33,10 @@ module "cloud-provider" {
 ################################################################################
 
 module "route53" {
-  source = "git::ssh://git@github.com/nullplatform/infrastructure-main-nullplatform-terraform.git//business/aws/route53?ref=feature/add-null-config"
-  account = var.account
-  domain_name = var.domain_name
-  environment = var.environment
+  source       = "git::ssh://git@github.com/nullplatform/infrastructure-main-nullplatform-terraform.git//business/aws/route53?ref=feature/add-null-config"
+  account      = var.account
+  domain_name  = var.domain_name
+  environment  = var.environment
   organization = var.organization
 }
 
@@ -45,9 +45,9 @@ module "route53" {
 ################################################################################
 
 module "iam" {
-  source = "git::ssh://git@github.com/nullplatform/infrastructure-main-nullplatform-terraform.git//business/aws/iam?ref=feature/add-null-config"
-  account = var.account
-  environment = var.environment
+  source       = "git::ssh://git@github.com/nullplatform/infrastructure-main-nullplatform-terraform.git//business/aws/iam?ref=feature/add-null-config"
+  account      = var.account
+  environment  = var.environment
   organization = var.organization
 }
 
@@ -55,12 +55,12 @@ module "iam" {
 # AWS ALB Controller
 ################################################################################
 module "aws_alb_controller" {
-  source = "git::ssh://git@github.com/nullplatform/infrastructure-main-nullplatform-terraform.git//business/aws/alb_controller?ref=feature/add-null-config"
-  account = var.account
+  source       = "git::ssh://git@github.com/nullplatform/infrastructure-main-nullplatform-terraform.git//business/aws/alb_controller?ref=feature/add-null-config"
+  account      = var.account
   cluster_name = var.cluster_name
-  environment = var.environment
+  environment  = var.environment
   organization = var.organization
-  vpc_id = var.vpc_id
+  vpc_id       = var.vpc_id
 }
 
 ################################################################################
