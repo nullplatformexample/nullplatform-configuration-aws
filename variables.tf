@@ -1,0 +1,10 @@
+variable "nrn" {}
+variable "github_organization" {}
+variable "github_organization_installation_id" {}
+variable "domain_name" {}
+variable "organization" {}
+variable "account" {}
+variable "vpc_id" {}
+variable "aws_region" {}
+variable "environment" {}
+variable "cluster_name" {}
