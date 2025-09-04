@@ -31,7 +31,7 @@ override.tf.json
 terraform.rc
 
 # Ignore .terraform.lock.hcl in some cases (uncomment if needed)
-#.terraform.lock.hcl
+.terraform.lock.hcl
 
 # Backend configuration files (may contain sensitive data)
 backend.tf

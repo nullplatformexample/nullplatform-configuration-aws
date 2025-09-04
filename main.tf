@@ -90,14 +90,14 @@ module "base" {
 # Null Agent
 ################################################################################
 
-module "null_agent" {
-  source = "git::ssh://git@github.com/nullplatform/infrastructure-main-nullplatform-terraform.git//business/nullplatform/helm/agent?ref=feature/add-null-config"
-
-  agent_repos  = ""
-  cloud_name   = ""
-  cluster_name = ""
-  np_api_key   = ""
-  tags         = ""
-  vault_token  = ""
-  vault_url    = ""
-}
+# module "null_agent" {
+#   source = "git::ssh://git@github.com/nullplatform/infrastructure-main-nullplatform-terraform.git//business/nullplatform/helm/agent?ref=feature/add-null-config"
+#
+#   agent_repos  = var.
+#   cloud_name   = ""
+#   cluster_name = ""
+#   np_api_key   = ""
+#   tags         = ""
+#   vault_token  = ""
+#   vault_url    = ""
+# }
