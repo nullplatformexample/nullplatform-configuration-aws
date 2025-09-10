@@ -33,3 +33,15 @@ variable "environment" {
 variable "cluster_name" {
   type = string
 }
+
+variable "api_key" {
+  type = string
+}
+
+variable "include_environment" {
+  type = bool
+}
+
+variable "agent_repos" {}
+variable "tags" {}
+variable "vpc" {}
