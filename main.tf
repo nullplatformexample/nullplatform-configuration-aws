@@ -9,6 +9,15 @@ module "foundations_vpc" {
 }
 
 ###############################################################################
+# VPC Config
+################################################################################
+module "foundations_dns" {
+  source       = "git@github.com:nullplatform/tofu-modules.git//infrastructure/aws/route53?ref=feature/refactor-scope-agents"
+  domain_name  = var.domain_name
+  vpc_id       = module.foundations_vpc.vpc_id
+}
+
+###############################################################################
 # EKS Config
 ################################################################################
 module "foundations_eks" {
@@ -26,6 +35,9 @@ module "nullplatform_code_repository" {
   np_api_key                   = var.np_api_key
   nrn                          = var.nrn
   git_provider                 = "gitlab"
+  group_path                   = var.group_path
+  access_token                 = var.access_token
+  installation_url             = var.installation_url
 }
 
 ###############################################################################
