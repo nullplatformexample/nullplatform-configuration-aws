@@ -5,11 +5,7 @@ variable "cluster_name" {}
 variable "nrn" {}
 variable "np_api_key" {}
 variable "tag_selectors" {}
-variable "certificate_arn" {}
-variable "agent_repos_extra" {}
 variable "domain_name" {}
-variable "github_organization" {}
-variable "github_installation_id" {}
 variable "group_path" {}
 variable "access_token" {}
 variable "installation_url" {}

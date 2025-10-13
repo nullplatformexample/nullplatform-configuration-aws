@@ -1,21 +1,13 @@
-nrn                                 = ""
-github_organization                 = ""
-github_installation_id              = ""
-domain_name                         = ""
-organization                        = ""
-account                             = ""
-cluster_name                        = ""
-np_api_key                          = ""
-group_path                              = ""
-access_token                            = ""
-installation_url                            = ""
-agent_repos_extra = []
-tag_selectors = { "environment" = ""}
-
-certificate_arn = ""
+nrn           = ""
+domain_name   = ""
+organization  = ""
+account       = ""
+cluster_name  = ""
+np_api_key    = ""
+tag_selectors = {"value_01": "key_01", "value_02": "key_02"}
 
 vpc = {
-  azs  = ["us-east-1a", "us-east-1b", "us-east-1c"]
+  azs        = ["us-east-1a", "us-east-1b", "us-east-1c"]
   cidr_block = "10.31.0.0/16"
   public_subnets = [
     "10.31.1.0/24",
