@@ -9,3 +9,6 @@ variable "domain_name" {}
 variable "group_path" {}
 variable "access_token" {}
 variable "installation_url" {}
+variable "collaborators_config" {}
+variable "gitlab_repository_prefix" {}
+variable "gitlab_slug" {}

@@ -47,6 +47,8 @@ module "foundations_networking" {
   source = "git@github.com:nullplatform/tofu-modules.git//infrastructure/aws/ingress?ref=feature/refactor-scope-agents"
 
   certificate_arn = module.foundations_dns.acm_certificate_arn
+
+  depends_on = [module.foundations_alb_controller]
 }
 
 ###############################################################################
@@ -60,6 +62,9 @@ module "nullplatform_code_repository" {
   group_path       = var.group_path
   access_token     = var.access_token
   installation_url = var.installation_url
+  collaborators_config = var.collaborators_config
+  gitlab_repository_prefix = var.gitlab_repository_prefix
+  gitlab_slug = var.gitlab_slug
 }
 
 ###############################################################################
