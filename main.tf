@@ -126,7 +126,4 @@ module "nullplatform_scope_agent" {
   np_api_key                          = var.np_api_key
   nrn                                 = var.nrn
   tags_selectors                      = var.tag_selectors
-  service_spec_name                   = "AgentScope"
-  service_spec_description            = "Deployments using agent scopes"
-
 }
