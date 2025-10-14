@@ -22,7 +22,7 @@ module "foundations_eks" {
 # DNS Config
 ################################################################################
 module "foundations_dns" {
-  source      = "git@github.com:nullplatform/tofu-modules.git//infrastructure/aws/route53?ref=v1.0.0"
+  source      = "git@github.com:nullplatform/tofu-modules.git//infrastructure/aws/route53?ref=v1.0.2"
   domain_name = var.domain_name
   vpc_id      = module.foundations_vpc.vpc_id
 }
@@ -55,7 +55,7 @@ module "foundations_networking" {
 # Code Repository
 ################################################################################
 module "nullplatform_code_repository" {
-  source           = "git@github.com:nullplatform/tofu-modules.git//nullplatform/code_repository?ref=v1.0.0"
+  source           = "git@github.com:nullplatform/tofu-modules.git//nullplatform/code_repository?ref=v1.0.2"
   np_api_key       = var.np_api_key
   nrn              = var.nrn
   git_provider     = "gitlab"
@@ -97,16 +97,12 @@ module "nullplatform_dimension" {
   nrn        = var.nrn
 }
 
-
-
-
 ###############################################################################
 # Nullplatform Base
 ################################################################################
 module "nullplatform_base" {
   source = "git@github.com:nullplatform/tofu-modules.git//nullplatform/cloud/aws/base?ref=v1.0.0"
   nrn    = var.nrn
-  nullplatform_base_helm_version = ""
 
   depends_on = [module.foundations_eks]
 }
