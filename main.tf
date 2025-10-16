@@ -12,7 +12,7 @@ module "foundations_vpc" {
 # EKS Config
 ################################################################################
 module "foundations_eks" {
-  source                  = "git::https://github.com/nullplatform/tofu-modules.git//infrastructure/aws/eks?ref=v1.0.0"
+  source                  = "git::https://github.com/nullplatform/tofu-modules.git//infrastructure/aws/eks?ref=v1.1.4"
   aws_subnets_private_ids = module.foundations_vpc.private_subnets
   aws_vpc_vpc_id          = module.foundations_vpc.vpc_id
   name                    = var.cluster_name
@@ -83,7 +83,7 @@ module "nullplatform_cloud_provider" {
 # Asset Repository
 ################################################################################
 module "nullplatform_asset_respository" {
-  source     = "git::https://github.com/nullplatform/tofu-modules.git//nullplatform/asset/ecr?ref=v1.0.0"
+  source     = "git::https://github.com/nullplatform/tofu-modules.git//nullplatform/asset/ecr?ref=v1.1.4"
   nrn        = var.nrn
   np_api_key = var.np_api_key
 }
@@ -119,7 +119,7 @@ module "nullplatform_prometheus" {
 }
 
 module "nullplatform_scope_agent" {
-  source = "git::https://github.com/nullplatform/tofu-modules.git//nullplatform/cloud/aws/agent?ref=v1.0.0"
+  source = "git::https://github.com/nullplatform/tofu-modules.git//nullplatform/cloud/aws/agent?ref=v1.1.4"
 
   aws_iam_openid_connect_provider_arn = module.foundations_eks.eks_oidc_provider_arn
   cluster_name                        = module.foundations_eks.eks_cluster_name

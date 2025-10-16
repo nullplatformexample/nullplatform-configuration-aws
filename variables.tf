@@ -12,3 +12,5 @@ variable "installation_url" {}
 variable "collaborators_config" {}
 variable "gitlab_repository_prefix" {}
 variable "gitlab_slug" {}
+variable "aws_region" {}
+variable "aws_profile" {}
