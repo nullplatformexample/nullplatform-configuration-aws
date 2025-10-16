@@ -1,3 +1,55 @@
+data "external" "check_tools" {
+  program = ["bash", "${path.module}/checks/check_tools"]
+}
+
+locals {
+  result = data.external.check_tools.result
+}
+
+output "check_tools_result" {
+  value = local.result
+}
+
+resource "null_resource" "validate_tools" {
+  lifecycle {
+    precondition {
+      condition     = local.result.status == "ok"
+      error_message = "Error: ${local.result.msg}"
+    }
+  }
+}
+
+data "external" "check_access" {
+  program = ["bash", "${path.module}/checks/check_access"]
+
+  query = {
+    AWS_PROFILE      = ""
+    AWS_REGION       = ""
+    CLUSTER_NAME     = ""
+    HOSTED_ZONE_NAME = ""
+    CERT_DOMAIN      = ""
+  }
+}
+
+locals {
+  preflight = data.external.check_access.result
+}
+
+# Ver el resultado en el plan
+output "check_access_result" {
+  value = local.preflight
+}
+
+# Cortar el apply si falló (status != "ok")
+resource "null_resource" "validate_preflight" {
+  lifecycle {
+    precondition {
+      condition     = local.preflight.status == "ok"
+      error_message = "Preflight falló: ${local.preflight.msg}"
+    }
+  }
+}
+
 ###############################################################################
 # VPC Config
 ################################################################################
@@ -55,16 +107,16 @@ module "foundations_networking" {
 # Code Repository
 ################################################################################
 module "nullplatform_code_repository" {
-  source           = "git::https://github.com/nullplatform/tofu-modules.git//nullplatform/code_repository?ref=v1.0.2"
-  np_api_key       = var.np_api_key
-  nrn              = var.nrn
-  git_provider     = "gitlab"
-  group_path       = var.group_path
-  access_token     = var.access_token
-  installation_url = var.installation_url
-  collaborators_config = var.collaborators_config
+  source                   = "git::https://github.com/nullplatform/tofu-modules.git//nullplatform/code_repository?ref=v1.0.2"
+  np_api_key               = var.np_api_key
+  nrn                      = var.nrn
+  git_provider             = "gitlab"
+  group_path               = var.group_path
+  access_token             = var.access_token
+  installation_url         = var.installation_url
+  collaborators_config     = var.collaborators_config
   gitlab_repository_prefix = var.gitlab_repository_prefix
-  gitlab_slug = var.gitlab_slug
+  gitlab_slug              = var.gitlab_slug
 }
 
 ###############################################################################

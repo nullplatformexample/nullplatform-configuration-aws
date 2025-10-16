@@ -1,0 +1,262 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ←←← Agregar esto para leer variables desde Terraform (data.external -> query)
+# Recibe JSON por STDIN y exporta AWS_REGION, CLUSTER_NAME, etc. como variables de entorno
+eval "$(jq -r 'to_entries | .[] | "export \(.key)=\(.value|@sh)"')"
+
+# Forzar locale simple (evita problemas de encoding con emojis)
+export LC_ALL=C
+export LANG=C
+
+# =========================
+# Config y helpers
+# =========================
+AWS_PROFILE="${AWS_PROFILE:-}"
+AWS_REGION="${AWS_REGION:-}"
+CLUSTER_NAME="${CLUSTER_NAME:-}"
+HOSTED_ZONE_NAME="${HOSTED_ZONE_NAME:-}"
+CERT_DOMAIN="${CERT_DOMAIN:-}"
+SKIP_UPDATE_KUBECONFIG="${SKIP_UPDATE_KUBECONFIG:-false}"
+
+# --- logging a stderr (Terraform external: stdout debe ser SOLO JSON) ---
+log()  { printf '%s\n' "$*" >&2; }
+ok()   { printf '✅ %s\n' "$*" >&2; }
+warn() { printf '⚠️  %s\n' "$*" >&2; }
+err()  { printf '❌ %s\n' "$*" >&2; }
+
+# Si falla, devolvemos JSON en stdout y salimos con 0 (para que Terraform lea el mapa)
+fail() {
+  local message="${1:-error}"
+  # Si no hay jq aún, devolvemos JSON plano mínimo
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "{\"status\":\"error\",\"msg\":\"${message}\"}"
+    exit 0
+  fi
+  jq -cn --arg status "error" --arg msg "$message" '{status:$status,msg:$msg}'
+  exit 0
+}
+
+require_env() {
+  local name="$1" val="${!1:-}"
+  [[ -n "$val" ]] || fail "Variable requerida '$name' no está definida."
+}
+
+aws_cmd() {
+  local args=("--region" "$AWS_REGION")
+  [[ -n "${AWS_PROFILE:-}" ]] && args+=("--profile" "$AWS_PROFILE")
+  aws "${args[@]}" "$@"
+}
+
+# =========================
+# Chequeo de herramientas
+# =========================
+
+# Chequeo temprano de jq para poder emitir JSON si hay errores
+if ! command -v jq >/dev/null 2>&1; then
+  log "🔍 Verificando herramientas necesarias..."
+  err "jq no está instalado o no está en el PATH"
+  # Emitimos JSON mínimo sin jq
+  echo '{"status":"error","msg":"jq no está instalado"}'
+  exit 0
+fi
+
+check_tool() {
+  local tool="$1" version_cmd="$2"
+  log "➡️  Verificando ${tool}..."
+  if ! command -v "${tool}" >/dev/null 2>&1; then
+    fail "${tool} no está instalado o no está en el PATH"
+  fi
+  local version_output
+  version_output=$(${version_cmd} 2>&1 || true)
+  if [[ -z "${version_output}" ]]; then
+    warn "${tool} está instalado, pero no devolvió versión."
+  else
+    ok "${tool} está instalado: ${version_output}"
+  fi
+}
+
+log "🔍 Verificando herramientas necesarias..."
+check_tool "aws" "aws --version"
+check_tool "kubectl" "kubectl version --client=true --short"
+check_tool "jq" "jq --version"
+
+log ""
+log "ℹ️  Validando variables requeridas..."
+require_env "AWS_REGION"
+require_env "CLUSTER_NAME"
+require_env "HOSTED_ZONE_NAME"
+require_env "CERT_DOMAIN"
+ok "Variables presentes."
+
+# Normalizar HOSTED_ZONE_NAME con punto final opcional
+if [[ "$HOSTED_ZONE_NAME" != *"." ]]; then
+  HOSTED_ZONE_NAME="${HOSTED_ZONE_NAME}."
+fi
+
+# Acumuladores para salida JSON
+account_id=""
+caller_arn=""
+oidc_issuer=""
+alb_ns=""
+hosted_zone_id=""
+cert_arn=""
+ingress_internal_found="false"
+ingress_public_found="false"
+
+log ""
+log "1) Validando credenciales de AWS (STS GetCallerIdentity)..."
+caller_json=$(aws_cmd sts get-caller-identity 2>/dev/null || true)
+if [[ -z "${caller_json}" ]]; then
+  fail "No fue posible obtener identidad (STS). Revisa credenciales/permisos."
+fi
+account_id=$(echo "$caller_json" | jq -r '.Account')
+caller_arn=$(echo "$caller_json" | jq -r '.Arn')
+ok "Credenciales válidas. Cuenta: ${account_id} | ARN: ${caller_arn}"
+
+log ""
+log "2) Accediendo al cluster EKS '${CLUSTER_NAME}' en ${AWS_REGION}..."
+if [[ "${SKIP_UPDATE_KUBECONFIG}" != "true" ]]; then
+  kubeconfig_args=(--region "$AWS_REGION" --name "$CLUSTER_NAME")
+  [[ -n "${AWS_PROFILE:-}" ]] && kubeconfig_args+=(--profile "$AWS_PROFILE")
+  if ! aws eks update-kubeconfig "${kubeconfig_args[@]}" >/dev/null 2>&1; then
+    fail "aws eks update-kubeconfig falló para el cluster '${CLUSTER_NAME}'."
+  fi
+  ok "kubeconfig actualizado para el cluster '${CLUSTER_NAME}'."
+else
+  warn "SKIP_UPDATE_KUBECONFIG=true — omitiendo update-kubeconfig."
+fi
+
+# Probar conectividad al API Server
+if kubectl cluster-info >/dev/null 2>&1; then
+  ok "Conectividad a Kubernetes OK."
+else
+  fail "No se pudo conectar al API Server del cluster."
+fi
+
+# Probar permisos básicos
+if kubectl auth can-i get nodes >/dev/null 2>&1; then
+  ok "El usuario/rol actual tiene permisos para consultar el cluster."
+else
+  warn "El usuario/rol actual NO tiene permisos para 'get nodes'."
+fi
+
+log ""
+log "3) Verificando OIDC habilitado en el cluster..."
+oidc_issuer=$(aws_cmd eks describe-cluster --name "$CLUSTER_NAME" --query "cluster.identity.oidc.issuer" --output text 2>/dev/null || true)
+if [[ -n "$oidc_issuer" && "$oidc_issuer" != "None" ]]; then
+  ok "OIDC habilitado. Issuer: ${oidc_issuer}"
+else
+  fail "El cluster no tiene OIDC habilitado (IRSA)."
+fi
+
+log ""
+log "4) Verificando instalación del AWS Load Balancer Controller..."
+# Intentar en namespaces comunes
+if kubectl -n kube-system get deployment aws-load-balancer-controller >/dev/null 2>&1; then
+  alb_ns="kube-system"
+elif kubectl -n aws-load-balancer-controller get deployment aws-load-balancer-controller >/dev/null 2>&1; then
+  alb_ns="aws-load-balancer-controller"
+elif kubectl -n kube-system get pod -l app.kubernetes.io/name=aws-load-balancer-controller >/dev/null 2>&1; then
+  alb_ns="kube-system"
+else
+  fail "No se encontró el Deployment 'aws-load-balancer-controller' en el cluster."
+fi
+
+# Chequear estado
+ready_replicas=$(kubectl -n "$alb_ns" get deploy aws-load-balancer-controller -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+desired_replicas=$(kubectl -n "$alb_ns" get deploy aws-load-balancer-controller -o jsonpath='{.status.replicas}' 2>/dev/null || echo "0")
+ok "ALB Controller encontrado en namespace '${alb_ns}' (ready: ${ready_replicas}/${desired_replicas})."
+
+log ""
+log "5) Verificando Hosted Zone pública '${HOSTED_ZONE_NAME}' en Route53..."
+hz_json=$(aws_cmd route53 list-hosted-zones-by-name --dns-name "$HOSTED_ZONE_NAME" --max-items 1 2>/dev/null || true)
+hz_name=$(echo "$hz_json" | jq -r '.HostedZones[0].Name // empty')
+hz_private=$(echo "$hz_json" | jq -r '.HostedZones[0].Config.PrivateZone // false')
+hosted_zone_id=$(echo "$hz_json" | jq -r '.HostedZones[0].Id // empty' | sed 's|/hostedzone/||')
+
+if [[ "$hz_name" == "$HOSTED_ZONE_NAME" && "$hz_private" == "false" && -n "$hosted_zone_id" ]]; then
+  ok "Hosted Zone pública OK (ID: ${hosted_zone_id})."
+else
+  fail "No se encontró una Hosted Zone pública que coincida exactamente con '${HOSTED_ZONE_NAME}'."
+fi
+
+log ""
+log "6) Verificando certificado ACM para el dominio '${CERT_DOMAIN}' en ${AWS_REGION}..."
+# Buscar por coincidencia exacta en DomainName o SubjectAlternativeNames
+cert_arns=$(aws_cmd acm list-certificates --certificate-statuses ISSUED 2>/dev/null | jq -r '.CertificateSummaryList[].CertificateArn // empty')
+found_cert=""
+for arn in $cert_arns; do
+  dom=$(aws_cmd acm describe-certificate --certificate-arn "$arn" 2>/dev/null | jq -r '.Certificate.DomainName // empty')
+  sans=$(aws_cmd acm describe-certificate --certificate-arn "$arn" 2>/dev/null | jq -r '.Certificate.SubjectAlternativeNames[]?' | tr '\n' ' ')
+  if [[ "$dom" == "$CERT_DOMAIN" ]] || [[ " $sans " == *" $CERT_DOMAIN "* ]]; then
+    found_cert="$arn"
+    break
+  fi
+done
+
+if [[ -n "$found_cert" ]]; then
+  cert_arn="$found_cert"
+  ok "Certificado ACM emitido encontrado: $cert_arn"
+else
+  fail "No se encontró un certificado ACM (ISSUED) que cubra '${CERT_DOMAIN}' en la región ${AWS_REGION}."
+fi
+
+log ""
+log "7) Verificando Ingress 'initial-ingress-setup-internal' y 'initial-ingress-setup-public'..."
+missing=0
+if kubectl get ingress -A >/dev/null 2>&1; then
+  if kubectl get ingress -A | awk '{print $2}' | grep -qx "initial-ingress-setup-internal"; then
+    ok "Ingress 'initial-ingress-setup-internal' encontrado."
+    ingress_internal_found="true"
+  else
+    err "No se encontró el Ingress 'initial-ingress-setup-internal'."
+    ingress_internal_found="false"
+    missing=$((missing+1))
+  fi
+
+  if kubectl get ingress -A | awk '{print $2}' | grep -qx "initial-ingress-setup-public"; then
+    ok "Ingress 'initial-ingress-setup-public' encontrado."
+    ingress_public_found="true"
+  else
+    err "No se encontró el Ingress 'initial-ingress-setup-public'."
+    ingress_public_found="false"
+    missing=$((missing+1))
+  fi
+else
+  fail "No fue posible listar Ingress en el cluster."
+fi
+
+if [[ $missing -gt 0 ]]; then
+  fail "Faltan uno o más Ingress requeridos."
+fi
+
+log ""
+ok "🎉 Auditoría completada: Todo OK."
+
+# =========================
+# Salida JSON (mapa de strings)
+# =========================
+jq -cn \
+  --arg status "ok" \
+  --arg msg "Auditoría completada: Todo OK" \
+  --arg account_id "$account_id" \
+  --arg caller_arn "$caller_arn" \
+  --arg oidc_issuer "$oidc_issuer" \
+  --arg alb_namespace "$alb_ns" \
+  --arg hosted_zone_id "$hosted_zone_id" \
+  --arg cert_arn "$cert_arn" \
+  --arg ingress_internal_found "$ingress_internal_found" \
+  --arg ingress_public_found "$ingress_public_found" \
+'{
+  status: $status,
+  msg: $msg,
+  account_id: $account_id,
+  caller_arn: $caller_arn,
+  oidc_issuer: $oidc_issuer,
+  alb_namespace: $alb_namespace,
+  hosted_zone_id: $hosted_zone_id,
+  cert_arn: $cert_arn,
+  ingress_internal_found: $ingress_internal_found,
+  ingress_public_found: $ingress_public_found
+}'

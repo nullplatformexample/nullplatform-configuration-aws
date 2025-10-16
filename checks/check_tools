@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Forzar locale simple (evita problemas de encoding con emojis)
+export LC_ALL=C
+export LANG=C
+
+# === Helpers ===
+log() { printf '%s\n' "$*" >&2; }   # mensajes a stderr
+fail() {
+  jq -cn --arg msg "$1" --arg status "error" '{msg:$msg,status:$status}'
+  exit 0
+}
+
+log "🔍 Verificando herramientas necesarias..."
+
+# Lista de herramientas y sus comandos para verificar versión
+check_tool() {
+  local tool=$1
+  local version_cmd=$2
+
+  log "➡️ Verificando ${tool}..."
+
+  if ! command -v "${tool}" >/dev/null 2>&1; then
+    fail "${tool} no está instalado o no está en el PATH"
+  fi
+
+  version_output=$(${version_cmd} 2>&1 || true)
+
+  if [ -z "${version_output}" ]; then
+    log "⚠️  ${tool} está instalado, pero no devolvió versión."
+  else
+    log "✅ ${tool} está instalado: ${version_output}"
+  fi
+}
+
+# Verificar cada herramienta
+check_tool "aws" "aws --version"
+check_tool "kubectl" "kubectl version --client=true --short"
+check_tool "helm" "helm version --short"
+check_tool "gomplate" "gomplate --version"
+check_tool "np" "np --version"
+
+log ""
+log "✅ Todas las herramientas requeridas están instaladas correctamente."
+
+# === Resultado JSON solo por stdout ===
+jq -cn --arg msg "Todas las herramientas requeridas están instaladas correctamente" --arg status "ok" \
+  '{msg:$msg,status:$status}'
